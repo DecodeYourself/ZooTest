@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "prototype-1",
+  "animals": [
+    {"id":"frog", "foodRole":"prey", "viewId":"frog-v1", "movement":{"kind":"jump", "speed":0, "intervalSeconds":1.2, "distance":2, "durationSeconds":0.35}},
+    {"id":"snake", "foodRole":"predator", "viewId":"snake-v1", "movement":{"kind":"linear", "speed":1.7, "intervalSeconds":0, "distance":0, "durationSeconds":0}}
+  ],
+  "views": [
+    {"id":"frog-v1", "address":"animals/frog/v1", "fallback":"sphere", "color":"#78D59A", "scale":[0.8,0.55,0.8]},
+    {"id":"snake-v1", "address":"animals/snake/v1", "fallback":"capsule", "color":"#EBB86C", "scale":[0.45,0.45,1.3]}
+  ]
+}

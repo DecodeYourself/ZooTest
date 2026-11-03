@@ -1,0 +1,5 @@
+{
+  "name":"Zoo.PlayModeTests",
+  "references":["Zoo.Runtime"],
+  "optionalUnityReferences":["TestAssemblies"]
+}

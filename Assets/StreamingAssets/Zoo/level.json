@@ -1,0 +1,8 @@
+{
+  "schemaVersion":1,
+  "spawnMinSeconds":1,
+  "spawnMaxSeconds":2,
+  "initialPopulation":12,
+  "cameraHalfHeight":9,
+  "spawnTable":[{"animalId":"frog", "weight":4}, {"animalId":"snake", "weight":1}]
+}

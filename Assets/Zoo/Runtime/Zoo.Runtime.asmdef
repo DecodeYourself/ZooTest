@@ -1,0 +1,6 @@
+{
+  "name": "Zoo.Runtime",
+  "rootNamespace": "Zoo",
+  "references": ["Unity.Addressables", "Unity.ResourceManager", "Unity.ugui", "Unity.InputSystem"],
+  "autoReferenced": true
+}

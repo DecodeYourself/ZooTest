@@ -1,0 +1,8 @@
+{
+  "schemaVersion":1,
+  "rules":[
+    {"roleA":"prey", "roleB":"prey", "action":"bounce"},
+    {"roleA":"predator", "roleB":"prey", "action":"consume", "winner":"predator"},
+    {"roleA":"predator", "roleB":"predator", "action":"consume", "winner":"lowerId"}
+  ]
+}

@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: Animal Visuals
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: Animal Visuals
+  m_GUID: c3e8ca648a7b3414fb7fedd39a4f24fc
+  m_SerializeEntries:
+  - m_GUID: 4b3393d3b4d53764ea118d1911b4d17d
+    m_Address: animals/frog/v1
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8a824f186275b424081e58a114a87d63
+    m_Address: animals/snake/v1
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: d635acee7e40502498e7c2de2f5e4099, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 0af0b9dbaf907ee4d933d6420ca9c8d4, type: 2}
+    - {fileID: 11400000, guid: cc72e445bc0adce4099c42b078c78df8, type: 2}
+    m_SchemaDisplayOrder:
+    - Animal Visuals_BundledAssetGroupSchema
+    - Animal Visuals_ContentUpdateGroupSchema
+  m_IncludeInBuild: 1
+  m_IncludeInBuildMigrated: 1

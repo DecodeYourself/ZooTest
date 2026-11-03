@@ -1,0 +1,6 @@
+{
+  "name":"Zoo.Tests",
+  "references":["Zoo.Runtime"],
+  "includePlatforms":["Editor"],
+  "optionalUnityReferences":["TestAssemblies"]
+}

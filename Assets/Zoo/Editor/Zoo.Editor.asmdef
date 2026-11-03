@@ -1,0 +1,5 @@
+{
+  "name":"Zoo.Editor",
+  "references":["Zoo.Runtime", "Unity.Addressables.Editor", "Unity.Addressables", "Unity.ResourceManager"],
+  "includePlatforms":["Editor"]
+}
