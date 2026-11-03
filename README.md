@@ -19,7 +19,11 @@ their configured rest intervals. Run In Background is enabled for switching betw
 - `level.json`: camera size, initial population, spawn interval and weighted species table.
 
 To add a species using existing mechanics, add its definition and spawn entry. Reuse a view ID or add a visual definition.
-Use `linear` with positive `speed`, or `jump` with positive distance/duration/interval (interval >= duration).
+Use `linear` with positive `speed`, `jump` with positive distance/duration/interval (interval >= duration),
+or `dash` with positive speed/duration/interval (interval >= duration). Dash moves at the configured
+speed during each active window and rests for the remainder of the interval; it stays on the ground.
+For example `{"kind":"dash","speed":6,"intervalSeconds":2,"durationSeconds":0.3}` gives an
+unimpeded 1.8-unit dash every two seconds. Existing species retain their original movement.
 To add a genuinely new mechanic, implement `IMovementBehavior`, register it in `MovementFactory`,
 and extend validation. JSON selects compiled capabilities; it is not executable code.
 

@@ -45,8 +45,10 @@ namespace Zoo.Content
                 Require(animal.foodRole == "prey" || animal.foodRole == "predator", "Unknown food role.");
                 Require(animal.viewId != null && views.ContainsKey(animal.viewId), "Missing animal view: " + animal.viewId);
                 var m = animal.movement;
-                Require(m != null && (m.kind == "linear" || m.kind == "jump"), "Unknown movement.");
+                Require(m != null && (m.kind == "linear" || m.kind == "jump" || m.kind == "dash"), "Unknown movement.");
                 if (m.kind == "linear") Require(Positive(m.speed), "Linear speed must be positive.");
+                else if (m.kind == "dash") Require(Positive(m.speed) && Positive(m.durationSeconds) && Positive(m.intervalSeconds)
+                    && m.durationSeconds <= m.intervalSeconds, "Invalid dash speed/timing.");
                 else Require(Positive(m.distance) && Positive(m.durationSeconds) && Positive(m.intervalSeconds) && m.intervalSeconds >= m.durationSeconds, "Invalid jump timing/distance.");
                 animals.Add(animal.id, animal);
                 roles.Add(animal.foodRole);

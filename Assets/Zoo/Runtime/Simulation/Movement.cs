@@ -47,6 +47,7 @@ namespace Zoo.Simulation
         {
             "linear" => new LinearMovement(definition.speed),
             "jump" => new JumpMovement(definition, Random.Range(0, definition.intervalSeconds)),
+            "dash" => new DashMovement(definition),
             _ => throw new System.ArgumentException("Unsupported movement: " + definition.kind)
         };
     }

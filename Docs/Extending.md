@@ -8,11 +8,16 @@ No application update is needed when the required movement/actions already exist
 
 ## New movement algorithm: periodic dash
 
+`dash` is now implemented in `Assets/Zoo/Runtime/Simulation/DashMovement.cs`, registered in
+MovementFactory and accepted by ContentCatalog validation. The existing species keep their original
+movement. To opt in, set a species' movement to the JSON below and reload its content set. The steps
+and example implementation here also describe the pattern for adding another strategy.
+
 The current strategy interface controls speed and visual height. AnimalActor controls direction,
 steering, contacts and Rigidbody velocity. A periodic dash can use the existing MovementDefinition
 fields: `speed`, `intervalSeconds`, `durationSeconds`.
 
-1. Add a `DashMovement : IMovementBehavior` in Runtime/Simulation. Each actor needs its own instance
+1. Implement `IMovementBehavior` in Runtime/Simulation. Each actor needs its own instance
    because the strategy stores its phase. Integrate the active portion of each physics step rather
    than rounding duration to an integer number of physics steps:
 
@@ -41,11 +46,12 @@ public sealed class DashMovement : IMovementBehavior
 
 The example belongs in `Zoo.Simulation` and uses `UnityEngine` and `Zoo.Content`.
 
-2. Register `"dash" => new DashMovement(definition)` in MovementFactory.
-3. Extend ContentCatalog validation: accept `dash`, require finite positive speed and interval/duration,
+2. Register the strategy in MovementFactory (`"dash" => new DashMovement(definition)` is already present).
+3. Extend ContentCatalog validation: dash requires finite positive speed and interval/duration,
    and require `durationSeconds <= intervalSeconds`. Keep the existing jump and linear validation.
-4. Add tests for active/rest periods, distance across non-divisible physics steps and invalid timings.
-5. Build a new application containing this C# capability. Then content releases can select:
+4. Test active/rest periods, distance across non-divisible physics steps and invalid timings.
+   DashMovementTests covers these cases, multiple cycles in a single step and independent actor state.
+5. Build an application containing this C# capability. Content releases can then select:
 
 ```json
 "movement": {

@@ -106,6 +106,33 @@ namespace Zoo.Tests
                 Random.state = randomState;
             }
         }
+
+        [UnityTest] public IEnumerator DashBodyStopsDuringRestAndResumesNextCycle()
+        {
+            material = new PhysicsMaterial();
+            var actor = Make(1, "predator", new InteractionResolver(), new MovementDefinition
+            { kind = "dash", speed = 4, intervalSeconds = 0.8f, durationSeconds = 0.2f });
+            actor.gameObject.AddComponent<MovementTestDriver>().Actor = actor;
+            var body = actor.GetComponent<Rigidbody>();
+            bool moved = false;
+            for (int step = 0; step < 15; step++)
+            {
+                yield return new WaitForFixedUpdate();
+                moved |= body.linearVelocity.sqrMagnitude > 0;
+            }
+            Assert.That(moved, Is.True, "Dash must drive the Rigidbody.");
+            Assert.That(body.linearVelocity.sqrMagnitude, Is.Zero);
+            var restingPosition = body.position;
+            for (int step = 0; step < 5; step++) yield return new WaitForFixedUpdate();
+            Assert.That(Vector3.Distance(body.position, restingPosition), Is.LessThan(0.0001f));
+            bool resumed = false;
+            for (int step = 0; step < 40; step++)
+            {
+                yield return new WaitForFixedUpdate();
+                if (body.linearVelocity.sqrMagnitude > 0) { resumed = true; break; }
+            }
+            Assert.That(resumed, Is.True, "Dash must resume in the next cycle.");
+        }
     }
 
     public sealed class MovementTestDriver : MonoBehaviour
