@@ -1,123 +1,267 @@
 # Zoo World
 
-Unity 6000.3.18f1 / URP / GameObjects / PhysX / uGUI / Addressables. No ECS.
+Прототип зоопарка: лягушки прыгают, змеи движутся линейно, животные сталкиваются физически и взаимодействуют по пищевой цепочке. Счётчики погибших и надписи `Tasty!` реализованы через uGUI.
 
-Open `Assets/Zoo/Scenes/Zoo.unity` and press Play. Frogs jump, snakes move linearly;
-contacts apply the JSON food-chain rules. Death totals are in the upper right.
-Visual placeholders are intentional: the assignment evaluates architecture.
+Проект: [DecodeYourself/ZooTest](https://github.com/DecodeYourself/ZooTest).
 
-Physics runs at a fixed 50 Hz. Rigidbody position interpolation and render-frame interpolation
-of jump height/heading make presentation continuous between physics steps. Animals turn gradually;
-frog jump phases are staggered so the initial population does not move in lockstep. Frogs retain
-their configured rest intervals. Run In Background is enabled for switching between Unity and Codex.
+## Требования и первый запуск
 
-## Content and extension
+- Unity **6000.3.18f1**, платформа **Windows / StandaloneWindows64** для подготовленного CDN-выпуска.
+- Git: нужен также Unity Package Manager для загрузки UniTask из Git-зависимости.
+- Python 3 для локального HTTP-сервера. Запускной файл использует `CDN_PYTHON`, затем пробует bundled Python Codex, затем команду `python` из PATH.
+- Доступ к пакетам Unity и GitHub при первом открытии.
 
-`Assets/StreamingAssets/Zoo/` contains:
-- `animals.json`: stable species IDs, food roles, movement strategies, versioned view IDs and Addressable addresses.
-- `interactions.json`: symmetric role pairs, `bounce` or `consume`, and winner policy.
-- `level.json`: camera size, initial population, spawn interval and weighted species table.
+1. Клонируйте репозиторий и добавьте папку с `Assets`, `Packages`, `ProjectSettings` в Unity Hub.
+2. Откройте проект указанной версией Unity и дождитесь импорта пакетов и завершения компиляции.
+3. Откройте `Assets/Zoo/Scenes/Zoo.unity`.
+4. Для быстрого запуска без сервера в **Window → Asset Management → Addressables → Groups** выберите **Play Mode Script → Use Asset Database**.
+5. Нажмите Play. Животные появляются каждые 1–2 секунды; начальная популяция определяется конфигом.
 
-To add a species using existing mechanics, add its definition and spawn entry. Reuse a view ID or add a visual definition.
-Use `linear` with positive `speed`, `jump` with positive distance/duration/interval (interval >= duration),
-or `dash` with positive speed/duration/interval (interval >= duration). Dash moves at the configured
-speed during each active window and rests for the remainder of the interval; it stays on the ground.
-For example `{"kind":"dash","speed":6,"intervalSeconds":2,"durationSeconds":0.3}` gives an
-unimpeded 1.8-unit dash every two seconds. Existing species retain their original movement.
-To add a genuinely new mechanic, implement `IMovementBehavior`, register it in `MovementFactory`,
-and extend validation. JSON selects compiled capabilities; it is not executable code.
+Не нужно запускать генератор сцены для обычной работы: готовая сцена уже находится в репозитории.
 
-During Play Mode, edit the files and click **Reload JSON**. The entire candidate is validated before
-publication at a physics boundary. Existing actors retain their species/view definitions; interaction
-rules and spawn settings switch globally. Invalid content preserves the current catalog.
-Desktop/editor reads from disk. StreamingAssets URL reading supports packaged platforms, but editing
-StreamingAssets after installation is not a remote configuration service. **Update content** uses a
-remote release manifest and loads the three JSON documents as Addressable TextAssets instead.
+В Git хранятся исходники, конфиги, настройки Addressables и Unity `.meta`. Кэши Unity, IDE-файлы, собранные bundles и локальные журналы не хранятся. После чистого клонирования для режима **Use Existing Build** необходимо сначала собрать контент по инструкции ниже.
 
-## Architecture
+## Где находятся данные
 
-`ZooBootstrap` is the composition root and forwards Unity lifecycle callbacks. Services receive
-dependencies explicitly: `ZooWorld` owns the active population and physics-step scheduling;
-`SpawnService` owns spawn timing, weighted selection and placement; `AnimalFactory` constructs actors,
-shares their contact material and attaches visuals. `CameraArena` supplies screen bounds, while
-`ZooContentController` coordinates local/remote content commands independently of the HUD.
-`AnimalActor` owns physical state, lifecycle and per-instance movement.
-It reports collisions to `InteractionResolver`, which deduplicates/sorts pairs and marks death immediately.
-`ZooHud` observes results; `AnimalViewLoader` caches Addressables handles and releases them on shutdown.
-Visual prefabs contain no gameplay colliders or behavior. Fallback geometry keeps actors visible on load failure.
-`FallbackViewPool` reuses sphere/capsule instances, shares materials by color, and returns leases on
-visual replacement or animal death. Scale and pose are reset on every rent. At most 32 inactive
-instances per shape/color are retained; active animals always have separate objects. Cached prefabs
-instantiate directly without creating a fallback. The world-owned loader disposes the pool/materials.
+| Путь | Назначение |
+| --- | --- |
+| `Assets/StreamingAssets/Zoo/animals.json` | Локальные определения видов и визуалов |
+| `Assets/StreamingAssets/Zoo/interactions.json` | Правила столкновений между пищевыми ролями |
+| `Assets/StreamingAssets/Zoo/level.json` | Начальная популяция, камера, интервалы и веса спавна |
+| `Assets/Zoo/Visuals/` | Prefab и материалы визуальных представлений |
+| `Assets/Zoo/Releases/release-2/` | Исходные JSON подготовленного удалённого выпуска |
+| `Assets/Zoo/Editor/Release2Builder.cs` | Сборщик и проверка выпуска `release-2` |
+| `Tools/LocalCdn/` | Исходники HTTP-сервера и запускной файл |
 
-There is no species inheritance hierarchy. Adding 1000 species means extending data, not writing 1000 classes.
-An actor limit, pooling and accelerated simulation are deliberately deferred until measurement shows a need.
+Стартовый локальный набор имеет `contentVersion: prototype-1`. Удалённый выпуск имеет `contentVersion: release-2`. Это разные наборы данных: редактирование StreamingAssets не обновляет удалённый bundle автоматически.
 
-## Addressables and remote content
+## Как добавить животное
 
-The default **Animal Visuals** group is local and works offline. Initial local content is built.
-Editor Play Mode normally uses Asset Database; use **Use Existing Build** to verify built bundles.
+Пример: добавляем рысь `lynx`, которая относится к хищникам и прыгает. Для существующего способа движения новый C#-класс животного не нужен.
 
-For a local remote-content demonstration:
-1. Choose **Zoo > Content > Use remote localhost profile**. This selects `RemoteLocalhost`, enables
-   Build Remote Catalog, and switches the visuals group to remote paths.
-2. Choose **Zoo > Content > Build Addressables**. Build a player for the same target.
-3. Serve `ServerData` on port 8080 (for example `python -m http.server 8080 --directory ServerData`).
-   `Remote.LoadPath` is `http://127.0.0.1:8080/[BuildTarget]`; this is for desktop localhost tests only.
-4. For an update, preserve the original content-state file. Use Addressables **Update a Previous Build**
-   and publish the resulting bundles, catalog and hash. Never delete bundles required by older clients.
-5. Prefer new immutable addresses such as `animals/frog/v2`. Publish a release manifest identifying
-   the catalog and versioned config addresses. **Update content** downloads the configs and preloads
-   their visuals before staging the candidate. Old actors keep their old visual.
+### 1. Подготовить визуал
 
-Unique Bundle IDs are enabled to support old and new content coexisting. Catalog updates do not replace
-already-instantiated objects. Production hosting and cross-platform bundles are not yet validated.
+1. Создайте `Assets/Zoo/Visuals/lynx-v1.prefab`.
+2. Оставьте в нём модель/геометрию, материалы и при необходимости визуальную анимацию. Не добавляйте игровой `Rigidbody`, `Collider` или `AnimalActor`: их создаёт фабрика.
+3. Настройте размер, положение относительно начала координат и материалы в самом prefab. Локальное начало координат должно соответствовать центру животного; направление вперёд — локальная ось +Z.
+4. В Addressables Groups зарегистрируйте prefab под адресом **`animals/lynx/v1`**. Для локальной проверки можно использовать группу **Animal Visuals**; для CDN его должен включить сборщик удалённого выпуска.
 
-### Prepared release-2 demo
+Новый адрес должен быть зарегистрирован до его первого использования. Для локального сценария подготовьте Addressables до входа в Play Mode.
 
-`Assets/Zoo/Releases/release-2` contains the authored JSON sources. The release adds caracal as a
-jumping predator and intentionally sets all future spawns to caracal for a clear demonstration.
-Startup still reads `prototype-1` from StreamingAssets.
+### 2. Добавить определение вида
 
-**Zoo > Content > Build CDN release-2** publishes a full, separately loadable catalog plus the remote
-config/prefab bundle to `../cdn_server/release-2/StandaloneWindows64`, then writes `release.json` last.
-It selects **Use Existing Build** for Play Mode. This is a new catalog release, not a patch generated
-against the earlier local build's content-state file. Do not overwrite immutable published releases
-for production; use a new release directory and addresses.
+В массив `animals` нужного `animals.json` добавьте объект:
 
-Start `../cdn_server/start_local_cdn.cmd`, enter Play Mode and click **Update content**.
-The default manifest URL is `http://127.0.0.1:8080/release-2/release.json` (serialized on ZooBootstrap).
-When status becomes `Active: release-2`, the next spawn uses caracal. Do not click **Reload JSON**
-afterwards unless intentionally returning to the local prototype-1 configuration.
+```json
+{
+  "id": "lynx",
+  "foodRole": "predator",
+  "viewId": "lynx-v1",
+  "movement": {
+    "kind": "jump",
+    "speed": 0,
+    "intervalSeconds": 1.2,
+    "distance": 2,
+    "durationSeconds": 0.35
+  }
+}
+```
 
-Actual HTTP download of catalog, config TextAssets and caracal prefab was verified in Unity Play Mode.
-The server log contains their successful GET requests. Downloads may subsequently use Unity's bundle cache.
-The current release targets Windows 64-bit only. **Zoo > Content > Verify CDN release-2 download**
-performs a download/validation smoke check during Play Mode without applying it to the world.
+В массив `views` того же файла добавьте:
 
-**Zoo > Set up prototype scene and visuals** creates missing initial assets. It does not overwrite an
-existing Zoo scene. It restores local group paths; select the Default profile as well when returning
-from the remote demonstration. Addressables remote settings are project assets and should be reviewed in Git.
+```json
+{
+  "id": "lynx-v1",
+  "address": "animals/lynx/v1",
+  "fallback": "sphere",
+  "color": "#FF8066",
+  "scale": [0.8, 0.55, 0.8]
+}
+```
 
-## Verification
+`viewId` связывает вид с визуальным определением, а `address` должен точно совпадать с адресом Addressables. `fallback`, `color` и `scale` описывают запасную геометрию; они не перекрашивают и не масштабируют загруженный prefab. Запасные объекты переиспользуются пулом, материалы разделяются по цвету.
 
-EditMode tests cover shipped data, invalid references/movement/rule matrices, callback-order-independent
-winner selection, transactional reload and jump distance. PlayMode tests cover duplicate/multi-contact
-death accounting. Run from **Window > General > Test Runner** or Unity Pipeline `test.run`.
-PlayMode also verifies that presentation changes on render frames between deliberately coarse physics steps.
+Уникальные ID не должны повторяться. `schemaVersion` пока равен `1`; `contentVersion` задаёт версию набора, а не формат JSON.
 
-CLI and MCP were both verified against the running editor. On this machine the CLI is at
-`C:\Users\decode_yourself\AppData\Local\Unity\bin\unity.exe`; it may require the full path and local-server
-access outside the Codex sandbox. The MCP connection is pinned to this project.
+### 3. Разрешить спавн
 
-Repository: [DecodeYourself/ZooTest](https://github.com/DecodeYourself/ZooTest).
-Generated caches, IDE project files,
-debug captures and build outputs are excluded; required Unity `.meta` files are versioned.
+В `level.json` добавьте элемент в `spawnTable`, например:
 
-Server source and launcher are versioned under `Tools/LocalCdn`. The release builder copies them to
-the sibling `cdn_server` folder. Generated catalogs/bundles and local server logs stay outside Git.
-See [extension examples](Docs/Extending.md) for adding movement and collision rules.
+```json
+"spawnTable": [
+  {"animalId": "frog", "weight": 4},
+  {"animalId": "snake", "weight": 1},
+  {"animalId": "lynx", "weight": 1}
+]
+```
 
-Async loading uses UniTask 2.5.11. Public async operations require a CancellationToken. World teardown
-and actor death cancel their waits; the visual cache owns shared Addressables handles until disposal.
-See [assignment review and scaling notes](Docs/CodeReview.md) for remaining limitations.
+Вес определяет относительную вероятность. Чтобы гарантированно увидеть новый вид при проверке, временно оставьте только `{"animalId":"lynx","weight":1}`.
+
+Пищевая роль может быть `prey` или `predator`. Рысь сразу использует существующие правила хищника; менять `interactions.json` для её добавления не требуется.
+
+### 4. Проверить локально во время Play Mode
+
+1. Для этого сценария редактируйте файлы **`Assets/StreamingAssets/Zoo/`** и используйте **Use Asset Database**.
+2. Сохраните все JSON, затем нажмите **Reload JSON** в Game View.
+3. Дождитесь `Active: <contentVersion>`. При следующем подходящем спавне появится новый вид.
+
+Набор проверяется целиком до применения. При ошибке останется текущая версия. Уже существующие животные сохраняют определения и визуалы; новый конфиг вида влияет на будущие экземпляры. Смена конфига не создаёт начальную популяцию повторно. Таблица взаимодействий переключается глобально.
+
+### Доступные способы движения
+
+| `kind` | Параметры |
+| --- | --- |
+| `linear` | Положительный `speed` |
+| `jump` | Положительные `distance`, `intervalSeconds`, `durationSeconds`; длительность не больше интервала |
+| `dash` | Положительные `speed`, `intervalSeconds`, `durationSeconds`; длительность не больше интервала |
+
+Пример рывка: `{"kind":"dash","speed":6,"intervalSeconds":2,"durationSeconds":0.3}` — движение на уровне земли со скоростью 6 во время 0,3-секундного рывка каждые 2 секунды.
+
+Для нового алгоритма нужно реализовать `IMovementBehavior`, зарегистрировать его в `MovementFactory`, расширить валидацию и собрать приложение. Addressables доставляет данные и ассеты, но не новые реализации C#. Подробности и примеры правил: [Docs/Extending.md](Docs/Extending.md).
+
+## Сборка подготовленного Addressables-релиза release-2
+
+Подготовленный выпуск добавляет **каракала (`caracal`) — прыгающего хищника**. Для наглядности его таблица спавна содержит только каракала. Локальный стартовый набор при этом остаётся `prototype-1`.
+
+1. Выйдите из Play Mode.
+2. Выберите платформу **Windows / StandaloneWindows64** в Build Profiles. При необходимости установите её поддержку через Unity Hub.
+3. Выполните **Zoo → Content → Build CDN release-2**.
+4. Дождитесь окончания сборки и сообщения `CDN release-2 published` без ошибок в Console.
+
+Сборщик сам:
+
+- проверяет три JSON из `Assets/Zoo/Releases/release-2/`;
+- регистрирует prefab каракала и JSON как Addressable-ассеты;
+- создаёт группу **Release 2** и профиль **CDN release-2**;
+- включает удалённый каталог и Unique Bundle IDs;
+- собирает Windows-контент и выбирает **Use Existing Build** для Play Mode;
+- записывает манифест после сборки и копирует исходники сервера в соседнюю папку `cdn_server`.
+
+При текущем расположении проекта результат будет здесь:
+
+```text
+E:\Projects\zoo_test\cdn_server\
+  start_local_cdn.cmd
+  cdn_server.py
+  README.txt
+  release-2\
+    release.json
+    StandaloneWindows64\
+      catalog_release-2.bin
+      catalog_release-2.hash
+      release2_assets_all_<hash>.bundle
+```
+
+Папка вычисляется относительно проекта: `ZooTest/../cdn_server`. В ней могут оставаться bundles предыдущих локальных сборок; загрузку определяет актуальный каталог.
+
+Это **полный отдельно загружаемый каталог**, а не результат команды **Update a Previous Build** относительно старого content-state файла. Не смешивайте эти два способа выпуска. Для production-патчей через Update a Previous Build требуется сохранять соответствующий исходный content-state файл.
+
+## Как запустить локальный CDN
+
+После сборки запустите в PowerShell из корня Unity-проекта:
+
+```powershell
+& "..\cdn_server\start_local_cdn.cmd"
+```
+
+Либо запустите версионируемый launcher, который также выберет соседнюю папку CDN:
+
+```powershell
+& ".\Tools\LocalCdn\start_local_cdn.cmd"
+```
+
+Оставьте окно сервера открытым. Остановка — **Ctrl+C**. Порт **8080** должен быть свободен; не запускайте второй сервер, если первый уже работает.
+
+Если нужно явно указать Python:
+
+```powershell
+$env:CDN_PYTHON = "C:\Path\To\Python\python.exe"
+& ".\Tools\LocalCdn\start_local_cdn.cmd"
+```
+
+Проверьте выдачу манифеста:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8080/release-2/release.json"
+```
+
+Ожидаются `releaseId: release-2`, `platform: StandaloneWindows64` и URL каталога. Сервер раздаёт файлы с CORS-заголовками. `127.0.0.1` здесь означает этот же компьютер.
+
+## Проверка через Update content без остановки Play Mode
+
+1. Соберите выпуск и запустите CDN по инструкции выше.
+2. Убедитесь, что Addressables Play Mode Script выбран **Use Existing Build**. Режим **Use Asset Database** подходит для локальной проверки исходников, но не подтверждает скачивание bundles с CDN.
+3. Откройте сцену `Assets/Zoo/Scenes/Zoo.unity`.
+4. На объекте **Zoo**, компонент **ZooBootstrap**, проверьте поле **Release Manifest Url**:
+
+   ```text
+   http://127.0.0.1:8080/release-2/release.json
+   ```
+
+5. Нажмите Play. Внизу должен появиться `Active: prototype-1`; стартуют лягушки и змеи.
+6. **Не останавливая Play Mode**, нажмите кнопку **Update content**.
+7. Дождитесь `Active: release-2` и сообщения `Remote release-2 ready; visuals downloaded`.
+8. Через 1–2 секунды начнут появляться прыгающие каракалы. Существующие животные останутся в мире.
+
+Кнопка загружает манифест, отдельный каталог, JSON как `TextAsset` и необходимые визуалы. Только после успешной загрузки и валидации набор передаётся миру для применения на границе физического шага. При ошибке активная конфигурация сохраняется; причина выводится в статусе и Console.
+
+**После Update content не нужно нажимать Reload JSON.** Эта кнопка загрузит локальный набор из StreamingAssets и вернёт `prototype-1`.
+
+В окне сервера видны запросы к манифесту, `.hash`, каталогу и bundle. Повторная проверка может использовать кэш Unity: отсутствие повторного скачивания bundle само по себе не означает ошибку.
+
+Меню **Zoo → Content → Verify CDN release-2 download** проверяет загрузку и определения во время Play Mode, но не переключает конфигурацию мира. Для проверки игрового обновления используйте именно кнопку **Update content**.
+
+## Как подготовить следующий выпуск с новым животным
+
+Сейчас сборщик и проверочное меню специально настроены на `release-2` и каракала. Простого создания папки `release-3` недостаточно: автоматического универсального сборщика выпусков пока нет.
+
+Для нового выпуска, например `release-3` с рысью:
+
+1. Скопируйте три JSON из `Assets/Zoo/Releases/release-2/` в `Assets/Zoo/Releases/release-3/`.
+2. Задайте в новом `animals.json` значение `contentVersion: release-3`, добавьте определения рыси и её визуала, обновите таблицу спавна нового `level.json`.
+3. Подготовьте `lynx-v1.prefab` и адрес `animals/lynx/v1`.
+4. Создайте отдельный сборщик по образцу `Release2Builder.cs`: измените имя класса, пункты меню, исходную папку, ID выпуска, профиль, группу, пути публикации и адреса конфигов на `release-3` / `Release 3`.
+5. Добавьте регистрацию нового prefab через тот же метод `Add`, например:
+
+   ```csharp
+   Add(settings, group, "Assets/Zoo/Visuals/lynx-v1.prefab", "animals/lynx/v1");
+   ```
+
+6. Убедитесь, что манифест связывает согласованный набор: `releaseId: release-3`, каталог из папки `release-3`, адреса `configs/release-3/animals`, `configs/release-3/interactions`, `configs/release-3/level`. JSON включаются в удалённую группу, как в существующем сборщике.
+7. Соберите новый выпуск вне Play Mode. Проверьте, что каталог, hash и bundles доступны по HTTP; манифест публикуйте после всех файлов.
+8. **До следующего входа в Play Mode** установите на ZooBootstrap URL `http://127.0.0.1:8080/release-3/release.json`, затем повторите проверку кнопкой Update content.
+
+URL передаётся контроллеру при создании мира: изменение поля Inspector уже после входа в Play Mode не перенастраивает созданный контроллер. Кнопка также не ищет новый номер релиза автоматически.
+
+Для изменённого визуала используйте новый адрес, например `animals/lynx/v2`. Не перезаписывайте опубликованные immutable-выпуски и не удаляйте bundles, которые ещё нужны старым клиентам. В локальном учебном сценарии release-2 можно пересобирать, но для проверки поведения с новым каталогом начните новую Play-сессию: уже загруженные объекты и locator-кэш автоматически не заменяются.
+
+## Типовые проблемы
+
+| Симптом | Что проверить |
+| --- | --- |
+| Не находится UniTask / ошибка Git dependency | Доступ Unity Package Manager к GitHub и наличие Git в окружении Unity |
+| Сервер не запускается | Python 3 / `CDN_PYTHON`, свободный порт 8080 |
+| `404` при Update content | Корень сервера должен быть `cdn_server`, а не `release-2` или Unity-проект; проверьте URL манифеста и каталога |
+| Ошибка каталога / отсутствуют bundles | Соберите контент, выберите Use Existing Build и проверьте платформу Windows64 |
+| Новый вид не появляется | Есть ли он в `animals` и `spawnTable`, положителен ли вес; для проверки оставьте только новый вид |
+| Вместо prefab запасная геометрия | Совпадают ли Addressables-адрес и `views.address`; включён ли prefab в нужный выпуск |
+| `Config rejected` / обновление не применилось | Синтаксис JSON, уникальность ID, ссылки `viewId`/`animalId`, параметры движения и совпадение версии с манифестом |
+| После обновления снова появились старые виды | Не был ли нажат Reload JSON; проверьте активную версию в HUD |
+| Изменение URL в Play Mode не подействовало | Настройте поле до запуска мира; автоматическое обнаружение новых выпусков не реализовано |
+
+## Архитектура и проверки
+
+- `ZooBootstrap` — сборка зависимостей и связь с жизненным циклом Unity.
+- `AnimalFactory` — создание животного, общий физический материал и подключение визуала.
+- `SpawnService` — таймер, веса и размещение спавна.
+- `ZooWorld` — популяция, физический шаг, применение конфигурации.
+- `ZooContentController` — команды локального и удалённого обновления.
+- `AnimalActor` / `IMovementBehavior` — физическое состояние и композиция движения.
+- `InteractionResolver` — однократная обработка контактов и смертей.
+- `AnimalViewLoader` / `FallbackViewPool` — Addressables-кэш и повторное использование запасных объектов.
+
+Используются GameObjects, PhysX, uGUI и UniTask 2.5.11; ECS не используется. Ожидания принимают CancellationToken и завершаются при уничтожении мира/животного. Один отменённый потребитель не отменяет общий prefab для остальных.
+
+Тесты запускаются через **Window → General → Test Runner**: EditMode и PlayMode. Последняя проверка кода: **37 EditMode + 14 PlayMode**, ошибок компиляции нет; переход на release-2 проверен в самой сцене.
+
+Дополнительно: [примеры расширения](Docs/Extending.md), [ревью задания](Docs/CodeReview.md), [план реализации](Docs/ImplementationPlan.md).
