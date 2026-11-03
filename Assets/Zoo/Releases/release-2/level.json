@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "spawnMinSeconds": 1,
+  "spawnMaxSeconds": 2,
+  "initialPopulation": 12,
+  "cameraHalfHeight": 9,
+  "spawnTable": [
+    {
+      "animalId": "caracal",
+      "weight": 1
+    }
+  ]
+}

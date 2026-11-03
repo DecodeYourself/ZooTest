@@ -27,8 +27,8 @@ During Play Mode, edit the files and click **Reload JSON**. The entire candidate
 publication at a physics boundary. Existing actors retain their species/view definitions; interaction
 rules and spawn settings switch globally. Invalid content preserves the current catalog.
 Desktop/editor reads from disk. StreamingAssets URL reading supports packaged platforms, but editing
-StreamingAssets after installation is not a remote configuration service. A remote JSON transport and
-versioned release manifest are future work; the reader can be injected into `ContentService`.
+StreamingAssets after installation is not a remote configuration service. **Update content** uses a
+remote release manifest and loads the three JSON documents as Addressable TextAssets instead.
 
 ## Architecture
 
@@ -54,12 +54,34 @@ For a local remote-content demonstration:
    `Remote.LoadPath` is `http://127.0.0.1:8080/[BuildTarget]`; this is for desktop localhost tests only.
 4. For an update, preserve the original content-state file. Use Addressables **Update a Previous Build**
    and publish the resulting bundles, catalog and hash. Never delete bundles required by older clients.
-5. Prefer new immutable addresses such as `animals/frog/v2`. Click **Update visuals**, then change
-   JSON to select the new view/address and click **Reload JSON**. Old actors keep their old visual.
+5. Prefer new immutable addresses such as `animals/frog/v2`. Publish a release manifest identifying
+   the catalog and versioned config addresses. **Update content** downloads the configs and preloads
+   their visuals before staging the candidate. Old actors keep their old visual.
 
 Unique Bundle IDs are enabled to support old and new content coexisting. Catalog updates do not replace
-already-instantiated objects. Production hosting, cross-platform bundles, remote configuration deployment
-and a real HTTP update run are not yet validated. The prototype has no production CDN dependency.
+already-instantiated objects. Production hosting and cross-platform bundles are not yet validated.
+
+### Prepared release-2 demo
+
+`Assets/Zoo/Releases/release-2` contains the authored JSON sources. The release adds caracal as a
+jumping predator and intentionally sets all future spawns to caracal for a clear demonstration.
+Startup still reads `prototype-1` from StreamingAssets.
+
+**Zoo > Content > Build CDN release-2** publishes a full, separately loadable catalog plus the remote
+config/prefab bundle to `../cdn_server/release-2/StandaloneWindows64`, then writes `release.json` last.
+It selects **Use Existing Build** for Play Mode. This is a new catalog release, not a patch generated
+against the earlier local build's content-state file. Do not overwrite immutable published releases
+for production; use a new release directory and addresses.
+
+Start `../cdn_server/start_local_cdn.cmd`, enter Play Mode and click **Update content**.
+The default manifest URL is `http://127.0.0.1:8080/release-2/release.json` (serialized on ZooBootstrap).
+When status becomes `Active: release-2`, the next spawn uses caracal. Do not click **Reload JSON**
+afterwards unless intentionally returning to the local prototype-1 configuration.
+
+Actual HTTP download of catalog, config TextAssets and caracal prefab was verified in Unity Play Mode.
+The server log contains their successful GET requests. Downloads may subsequently use Unity's bundle cache.
+The current release targets Windows 64-bit only. **Zoo > Content > Verify CDN release-2 download**
+performs a download/validation smoke check during Play Mode without applying it to the world.
 
 **Zoo > Set up prototype scene and visuals** creates missing initial assets. It does not overwrite an
 existing Zoo scene. It restores local group paths; select the Default profile as well when returning
@@ -78,3 +100,7 @@ access outside the Codex sandbox. The MCP connection is pinned to this project.
 
 Remote Git publication is pending a destination repository. Generated caches, IDE project files,
 debug captures and build outputs are excluded; required Unity `.meta` files are versioned.
+
+Server source and launcher are versioned under `Tools/LocalCdn`. The release builder copies them to
+the sibling `cdn_server` folder. Generated catalogs/bundles and local server logs stay outside Git.
+See [extension examples](Docs/Extending.md) for adding movement and collision rules.

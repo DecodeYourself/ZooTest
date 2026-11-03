@@ -32,7 +32,7 @@ namespace Zoo.Presentation
             counts.alignment = TextAnchor.UpperRight;
             status = MakeText("Content status", "", new Vector2(24, 24), new Vector2(740, 62), Vector2.zero, 16);
             Button("Reload JSON", new Vector2(-24, 24), reload);
-            Button("Update visuals", new Vector2(-210, 24), updateVisuals);
+            Button("Update content", new Vector2(-210, 24), updateVisuals);
         }
 
         Text MakeText(string name, string value, Vector2 position, Vector2 size, Vector2 anchor, int fontSize)

@@ -14,6 +14,20 @@ namespace Zoo.Presentation
         readonly Dictionary<string, Task<GameObject>> prefabs = new();
         readonly List<AsyncOperationHandle<GameObject>> handles = new();
         bool disposed;
+        public async Task PreloadAsync(string address)
+        {
+            if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Missing visual address");
+            if (!prefabs.TryGetValue(address, out var task))
+            {
+                task = LoadAsync(address);
+                prefabs.Add(address, task);
+            }
+            try
+            {
+                if (!await task) throw new InvalidOperationException("Missing prefab: " + address);
+            }
+            catch { prefabs.Remove(address); throw; }
+        }
         public async Task AttachAsync(AnimalActor actor, ViewDefinition view)
         {
             var fallback = MakeFallback(view);

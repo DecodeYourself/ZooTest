@@ -16,6 +16,8 @@ namespace Zoo
         readonly ContentService content = new();
         readonly InteractionResolver interactions = new();
         readonly List<AnimalActor> animals = new();
+        readonly RemoteReleaseLoader remoteReleases = new();
+        [SerializeField] string releaseManifestUrl = "http://127.0.0.1:8080/release-2/release.json";
         AnimalViewLoader views;
         ZooHud hud;
         Camera worldCamera;
@@ -116,20 +118,13 @@ namespace Zoo
         {
             if (updatingVisuals) return;
             updatingVisuals = true;
-            visualStatus = "Checking visual catalog...";
+                visualStatus = "Downloading remote release...";
             try
             {
-                var check = Addressables.CheckForCatalogUpdates(false);
-                try
-                {
-                    var catalogs = await check.Task;
-                    if (catalogs.Count == 0) { visualStatus = "Visual catalog is current"; return; }
-                    var update = Addressables.UpdateCatalogs(catalogs, false);
-                    try { await update.Task; }
-                    finally { if (update.IsValid()) Addressables.Release(update); }
-                    visualStatus = "Visual catalog updated; reload JSON to select new versioned addresses";
-                }
-                finally { if (check.IsValid()) Addressables.Release(check); }
+                var candidate = await remoteReleases.LoadAsync(releaseManifestUrl, views);
+                if (!this) return;
+                content.Stage(candidate);
+                visualStatus = "Remote " + candidate.Version + " ready; visuals downloaded";
             }
             catch (Exception error) { visualStatus = "Visual update failed: " + error.Message; Debug.LogWarning(visualStatus); }
             finally { updatingVisuals = false; }

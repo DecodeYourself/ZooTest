@@ -30,7 +30,8 @@
 - CLI and MCP verified against the running project.
 - Milestones 1 and 2 implemented; Zoo scene visually inspected in Play Mode.
 - Milestone 3: local Addressables built; remote localhost profile and manual catalog update implemented.
-  Actual remote HTTP content-update delivery and remote JSON release transport remain outstanding.
+  Remote JSON TextAssets and caracal prefab in release-2 were subsequently downloaded and validated
+  from the local HTTP server. Update content stages the release after all visual dependencies load.
 - Milestone 4: EditMode and PlayMode suites pass; standalone player build/performance profiling remain outstanding.
 - Continuous presentation: interpolated jump height/heading, smooth steering, staggered jump phases,
   Run In Background enabled. PlayMode verifies movement between physics ticks.

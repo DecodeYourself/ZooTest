@@ -15,6 +15,12 @@ namespace Zoo.Content
         public bool IsLoading { get; private set; }
         public string Status { get; private set; } = "Loading content...";
 
+        public void Stage(ContentCatalog candidate)
+        {
+            pending = candidate ?? throw new ArgumentNullException(nameof(candidate));
+            Status = "Validated " + candidate.Version + "; awaiting physics step";
+        }
+
         public async Task ReloadAsync()
         {
             if (IsLoading) return;
@@ -26,8 +32,7 @@ namespace Zoo.Content
                 var a = await read(Path.Combine(root, "animals.json"));
                 var r = await read(Path.Combine(root, "interactions.json"));
                 var l = await read(Path.Combine(root, "level.json"));
-                pending = ContentCatalog.Parse(a, r, l);
-                Status = "Validated " + pending.Version + "; awaiting physics step";
+                Stage(ContentCatalog.Parse(a, r, l));
             }
             catch (Exception error)
             {

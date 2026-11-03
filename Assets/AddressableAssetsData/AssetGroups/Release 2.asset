@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: Release 2
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: Release 2
+  m_GUID: 3b4c20f341dc126479ddc03c1642aba4
+  m_SerializeEntries:
+  - m_GUID: 04cfc50a4e5569f478d7bedad432d6d8
+    m_Address: configs/release-2/level
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 325de24951c7cfe478c543d6be517bb8
+    m_Address: configs/release-2/animals
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9bd75ac7f7c83584b8d11d9da0fb7f59
+    m_Address: animals/caracal/v1
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c950790f0e6919f458b5424c64760a5a
+    m_Address: configs/release-2/interactions
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: d635acee7e40502498e7c2de2f5e4099, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 1121e9c72f00f8d4d8b08f7fdcdcb433, type: 2}
+    - {fileID: 11400000, guid: 912c519263eb5654d89130de794aec63, type: 2}
+    m_SchemaDisplayOrder:
+    - Release 2_BundledAssetGroupSchema
+    - Release 2_ContentUpdateGroupSchema
+  m_IncludeInBuild: 1
+  m_IncludeInBuildMigrated: 1
