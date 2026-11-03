@@ -36,11 +36,19 @@ remote release manifest and loads the three JSON documents as Addressable TextAs
 
 ## Architecture
 
-`ZooBootstrap` composes content, interactions, movement, UI and visual loading. Services receive
-dependencies explicitly. `AnimalActor` owns physical state, lifecycle and per-instance movement.
+`ZooBootstrap` is the composition root and forwards Unity lifecycle callbacks. Services receive
+dependencies explicitly: `ZooWorld` owns the active population and physics-step scheduling;
+`SpawnService` owns spawn timing, weighted selection and placement; `AnimalFactory` constructs actors,
+shares their contact material and attaches visuals. `CameraArena` supplies screen bounds, while
+`ZooContentController` coordinates local/remote content commands independently of the HUD.
+`AnimalActor` owns physical state, lifecycle and per-instance movement.
 It reports collisions to `InteractionResolver`, which deduplicates/sorts pairs and marks death immediately.
 `ZooHud` observes results; `AnimalViewLoader` caches Addressables handles and releases them on shutdown.
 Visual prefabs contain no gameplay colliders or behavior. Fallback geometry keeps actors visible on load failure.
+`FallbackViewPool` reuses sphere/capsule instances, shares materials by color, and returns leases on
+visual replacement or animal death. Scale and pose are reset on every rent. At most 32 inactive
+instances per shape/color are retained; active animals always have separate objects. Cached prefabs
+instantiate directly without creating a fallback. The world-owned loader disposes the pool/materials.
 
 There is no species inheritance hierarchy. Adding 1000 species means extending data, not writing 1000 classes.
 An actor limit, pooling and accelerated simulation are deliberately deferred until measurement shows a need.
@@ -102,9 +110,14 @@ CLI and MCP were both verified against the running editor. On this machine the C
 `C:\Users\decode_yourself\AppData\Local\Unity\bin\unity.exe`; it may require the full path and local-server
 access outside the Codex sandbox. The MCP connection is pinned to this project.
 
-Remote Git publication is pending a destination repository. Generated caches, IDE project files,
+Repository: [DecodeYourself/ZooTest](https://github.com/DecodeYourself/ZooTest).
+Generated caches, IDE project files,
 debug captures and build outputs are excluded; required Unity `.meta` files are versioned.
 
 Server source and launcher are versioned under `Tools/LocalCdn`. The release builder copies them to
 the sibling `cdn_server` folder. Generated catalogs/bundles and local server logs stay outside Git.
 See [extension examples](Docs/Extending.md) for adding movement and collision rules.
+
+Async loading uses UniTask 2.5.11. Public async operations require a CancellationToken. World teardown
+and actor death cancel their waits; the visual cache owns shared Addressables handles until disposal.
+See [assignment review and scaling notes](Docs/CodeReview.md) for remaining limitations.

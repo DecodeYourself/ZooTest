@@ -1,5 +1,5 @@
 {
   "name":"Zoo.PlayModeTests",
-  "references":["Zoo.Runtime"],
+  "references":["Zoo.Runtime", "UniTask", "UniTask.Addressables", "Unity.Addressables", "Unity.ResourceManager"],
   "optionalUnityReferences":["TestAssemblies"]
 }

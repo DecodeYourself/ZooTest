@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
@@ -9,80 +10,88 @@ using Zoo.Simulation;
 
 namespace Zoo.Presentation
 {
-    public sealed class AnimalViewLoader
+    public sealed class AnimalViewLoader : IDisposable
     {
-        readonly Dictionary<string, Task<GameObject>> prefabs = new();
-        readonly List<AsyncOperationHandle<GameObject>> handles = new();
+        readonly Dictionary<string, AsyncOperationHandle<GameObject>> prefabs = new();
+        readonly CancellationTokenSource lifetime = new();
+        readonly Func<string, AsyncOperationHandle<GameObject>> load;
+        readonly FallbackViewPool fallbacks = new();
         bool disposed;
-        public async Task PreloadAsync(string address)
+        public AnimalViewLoader(Func<string, AsyncOperationHandle<GameObject>> load = null)
         {
+            this.load = load ?? (address => Addressables.LoadAssetAsync<GameObject>(address));
+        }
+
+        public async UniTask PreloadAsync(string address, CancellationToken cancellationToken)
+            => await GetPrefabAsync(address, cancellationToken);
+
+        async UniTask<GameObject> GetPrefabAsync(string address, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (disposed) throw new ObjectDisposedException(nameof(AnimalViewLoader));
             if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Missing visual address");
-            if (!prefabs.TryGetValue(address, out var task))
+            if (!prefabs.TryGetValue(address, out var handle))
             {
-                task = LoadAsync(address);
-                prefabs.Add(address, task);
+                handle = load(address);
+                prefabs.Add(address, handle);
             }
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, cancellationToken);
             try
             {
-                if (!await task) throw new InvalidOperationException("Missing prefab: " + address);
+                // Each caller gets its own awaiter. Cancelling one caller never releases the shared handle.
+                var prefab = await handle.ToUniTask(cancellationToken: linked.Token, cancelImmediately: true, autoReleaseWhenCanceled: false);
+                linked.Token.ThrowIfCancellationRequested();
+                if (!prefab) throw new InvalidOperationException("Missing prefab: " + address);
+                return prefab;
             }
-            catch { prefabs.Remove(address); throw; }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                if (prefabs.TryGetValue(address, out var current) && current.Equals(handle))
+                {
+                    prefabs.Remove(address);
+                    if (handle.IsValid()) Addressables.Release(handle);
+                }
+                throw;
+            }
         }
-        public async Task AttachAsync(AnimalActor actor, ViewDefinition view)
+
+        public async UniTask AttachAsync(AnimalActor actor, ViewDefinition view, CancellationToken cancellationToken)
         {
-            var fallback = MakeFallback(view);
-            fallback.transform.SetParent(actor.VisualRoot, false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (disposed) throw new ObjectDisposedException(nameof(AnimalViewLoader));
+            if (!actor || !actor.IsAlive) return;
+            // A ready prefab needs no temporary geometry or material allocation.
+            if (!string.IsNullOrEmpty(view.address) && prefabs.TryGetValue(view.address, out var ready)
+                && ready.IsValid() && ready.IsDone && ready.Status == AsyncOperationStatus.Succeeded && ready.Result)
+            {
+                UnityEngine.Object.Instantiate(ready.Result, actor.VisualRoot, false);
+                return;
+            }
+            var fallback = fallbacks.Rent(view, actor.VisualRoot, actor.LifetimeToken);
             if (string.IsNullOrEmpty(view.address)) return;
             try
             {
-                if (!prefabs.TryGetValue(view.address, out var task))
-                {
-                    task = LoadAsync(view.address);
-                    prefabs.Add(view.address, task);
-                }
-                var prefab = await task;
+                var prefab = await GetPrefabAsync(view.address, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (disposed || !actor || !actor.IsAlive || !prefab) return;
                 UnityEngine.Object.Instantiate(prefab, actor.VisualRoot, false);
-                UnityEngine.Object.Destroy(fallback);
+                fallback.Dispose();
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception error) { Debug.LogWarning("Visual fallback for " + view.id + ": " + error.Message); }
-        }
-
-        async Task<GameObject> LoadAsync(string address)
-        {
-            var handle = Addressables.LoadAssetAsync<GameObject>(address);
-            handles.Add(handle);
-            return await handle.Task;
         }
 
         public void Dispose()
         {
+            if (disposed) return;
             disposed = true;
-            foreach (var handle in handles) if (handle.IsValid()) Addressables.Release(handle);
-            handles.Clear();
+            lifetime.Cancel();
+            fallbacks.Dispose();
+            foreach (var handle in prefabs.Values) if (handle.IsValid()) Addressables.Release(handle);
+            prefabs.Clear();
+            lifetime.Dispose();
         }
 
-        public static GameObject MakeFallback(ViewDefinition view)
-        {
-            var result = GameObject.CreatePrimitive(view.fallback == "sphere" ? PrimitiveType.Sphere : PrimitiveType.Capsule);
-            result.name = "Fallback " + view.id;
-            var collider = result.GetComponent<Collider>();
-            collider.enabled = false;
-            UnityEngine.Object.Destroy(collider);
-            result.transform.localScale = new Vector3(view.scale[0], view.scale[1], view.scale[2]);
-            var renderer = result.GetComponent<Renderer>();
-            var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            ColorUtility.TryParseHtmlString(view.color, out var color);
-            material.color = color;
-            renderer.sharedMaterial = material;
-            result.AddComponent<OwnedMaterial>().Value = material;
-            return result;
-        }
-    }
-
-    public sealed class OwnedMaterial : MonoBehaviour
-    {
-        public Material Value;
-        void OnDestroy() { if (Value) Destroy(Value); }
     }
 }

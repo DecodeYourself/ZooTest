@@ -1,6 +1,6 @@
 {
   "name":"Zoo.Tests",
-  "references":["Zoo.Runtime"],
+  "references":["Zoo.Runtime", "UniTask"],
   "includePlatforms":["Editor"],
   "optionalUnityReferences":["TestAssemblies"]
 }

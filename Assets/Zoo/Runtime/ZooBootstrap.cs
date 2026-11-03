@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using Zoo.Content;
@@ -11,130 +10,69 @@ using Zoo.Simulation;
 
 namespace Zoo
 {
+    /// <summary>Composition root and Unity lifecycle bridge; game rules live in injected services.</summary>
     public sealed class ZooBootstrap : MonoBehaviour
     {
-        readonly ContentService content = new();
-        readonly InteractionResolver interactions = new();
-        readonly List<AnimalActor> animals = new();
-        readonly RemoteReleaseLoader remoteReleases = new();
         [SerializeField] string releaseManifestUrl = "http://127.0.0.1:8080/release-2/release.json";
+        CancellationTokenSource lifetime;
         AnimalViewLoader views;
+        AnimalFactory factory;
+        RemoteReleaseLoader remote;
+        InteractionResolver interactions;
+        ZooContentController contentCommands;
+        ZooWorld world;
         ZooHud hud;
-        Camera worldCamera;
-        PhysicsMaterial contactMaterial;
-        float spawnTimer;
-        int nextId;
-        bool initialized;
-        bool updatingVisuals;
-        string visualStatus = "";
-        public int AliveCount => animals.Count;
-        public int DeadPrey => interactions.DeadPrey;
-        public int DeadPredators => interactions.DeadPredators;
-        public string ContentVersion => content.Current?.Version;
 
-        async void Start()
+        public int AliveCount => world?.AliveCount ?? 0;
+        public int DeadPrey => world?.DeadPrey ?? 0;
+        public int DeadPredators => world?.DeadPredators ?? 0;
+        public string ContentVersion => world?.ContentVersion;
+
+        void Awake()
         {
-            worldCamera = Camera.main;
-            views = new AnimalViewLoader();
-            contactMaterial = new PhysicsMaterial("Animal contacts")
-            { bounciness = 0.85f, dynamicFriction = 0, staticFriction = 0, bounceCombine = PhysicsMaterialCombine.Maximum };
-            hud = new GameObject("Zoo HUD", typeof(RectTransform)).AddComponent<ZooHud>();
-            hud.Initialize(worldCamera, () => _ = content.ReloadAsync(), () => _ = UpdateVisualsAsync());
-            interactions.Eaten += hud.ShowTasty;
-            if (!FindFirstObjectByType<EventSystem>())
-            {
-                var events = new GameObject("EventSystem", typeof(EventSystem));
-                events.AddComponent<InputSystemUIInputModule>();
-            }
-            await content.ReloadAsync();
-        }
-
-        void FixedUpdate()
-        {
-            if (content.ApplyPending())
-            {
-                worldCamera.orthographicSize = content.Current.Level.cameraHalfHeight;
-                spawnTimer = NextSpawnDelay();
-                if (!initialized)
-                {
-                    initialized = true;
-                    for (int i = 0; i < content.Current.Level.initialPopulation; i++) Spawn();
-                }
-            }
-            if (!initialized) return;
-            interactions.Resolve(content.Current);
-            animals.RemoveAll(a => !a || !a.IsAlive);
-            var bounds = VisibleBounds();
-            foreach (var animal in animals) animal.Tick(Time.fixedDeltaTime, bounds);
-            if ((spawnTimer -= Time.fixedDeltaTime) <= 0)
-            { Spawn(); spawnTimer = NextSpawnDelay(); }
-        }
-
-        void Update()
-        {
-            if (hud) hud.Refresh(interactions.DeadPrey, interactions.DeadPredators, animals.Count,
-                content.Status + (string.IsNullOrEmpty(visualStatus) ? "" : "\n" + visualStatus));
-        }
-
-        Rect VisibleBounds()
-        {
-            var half = worldCamera.orthographicSize;
-            var width = half * worldCamera.aspect;
-            var center = worldCamera.transform.position;
-            return new Rect(center.x - width, center.z - half, width * 2, half * 2);
-        }
-
-        float NextSpawnDelay() => UnityEngine.Random.Range(content.Current.Level.spawnMinSeconds, content.Current.Level.spawnMaxSeconds);
-
-        void Spawn()
-        {
-            var catalog = content.Current;
-            var table = catalog.Level.spawnTable;
-            float total = 0;
-            foreach (var entry in table) total += entry.weight;
-            float pick = UnityEngine.Random.value * total;
-            var id = table[table.Length - 1].animalId;
-            foreach (var entry in table) { if ((pick -= entry.weight) <= 0) { id = entry.animalId; break; } }
-            var definition = catalog.Animal(id);
-            var bounds = VisibleBounds();
-            Vector3 position = Vector3.zero;
-            // Prefer a free position to avoid spawning directly inside another animal.
-            for (int attempt = 0; attempt < 20; attempt++)
-            {
-                position = new Vector3(UnityEngine.Random.Range(bounds.xMin + 1, bounds.xMax - 1), 0.5f,
-                    UnityEngine.Random.Range(bounds.yMin + 1, bounds.yMax - 1));
-                if (!Physics.CheckSphere(position, 0.6f)) break;
-            }
-            var go = new GameObject(id + " #" + (nextId + 1));
-            go.transform.SetParent(transform, false);
-            go.transform.position = position;
-            var actor = go.AddComponent<AnimalActor>();
-            actor.Initialize(++nextId, definition, interactions, contactMaterial);
-            animals.Add(actor);
-            _ = views.AttachAsync(actor, catalog.View(definition.viewId));
-        }
-
-        async Task UpdateVisualsAsync()
-        {
-            if (updatingVisuals) return;
-            updatingVisuals = true;
-                visualStatus = "Downloading remote release...";
+            lifetime = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken, Application.exitCancellationToken);
             try
             {
-                var candidate = await remoteReleases.LoadAsync(releaseManifestUrl, views);
-                if (!this) return;
-                content.Stage(candidate);
-                visualStatus = "Remote " + candidate.Version + " ready; visuals downloaded";
+                var camera = Camera.main;
+                var arena = new CameraArena(camera);
+                var content = new ContentService();
+                interactions = new InteractionResolver();
+                views = new AnimalViewLoader();
+                remote = new RemoteReleaseLoader();
+                factory = new AnimalFactory(transform, interactions, views);
+                world = new ZooWorld(content, interactions, new SpawnService(factory), arena);
+                contentCommands = new ZooContentController(content, remote, views, releaseManifestUrl);
+                hud = new GameObject("Zoo HUD", typeof(RectTransform)).AddComponent<ZooHud>();
+                hud.transform.SetParent(transform, false);
+                hud.Initialize(camera, () => contentCommands.ReloadLocalAsync(lifetime.Token).Forget(),
+                    () => contentCommands.UpdateRemoteAsync(lifetime.Token).Forget());
+                interactions.Eaten += hud.ShowTasty;
+                if (!FindFirstObjectByType<EventSystem>())
+                {
+                    var events = new GameObject("EventSystem", typeof(EventSystem));
+                    events.transform.SetParent(transform, false);
+                    events.AddComponent<InputSystemUIInputModule>();
+                }
             }
-            catch (Exception error) { visualStatus = "Visual update failed: " + error.Message; Debug.LogWarning(visualStatus); }
-            finally { updatingVisuals = false; }
+            catch (Exception error) { enabled = false; Debug.LogException(error); }
         }
+
+        void Start() => contentCommands.ReloadLocalAsync(lifetime.Token).Forget();
+        void FixedUpdate()
+        {
+            if (!lifetime.IsCancellationRequested) world.Tick(Time.fixedDeltaTime, lifetime.Token);
+        }
+        void Update() => hud.Refresh(DeadPrey, DeadPredators, AliveCount, contentCommands.Status);
 
         void OnDestroy()
         {
-            if (hud) interactions.Eaten -= hud.ShowTasty;
+            lifetime?.Cancel();
+            if (hud && interactions != null) interactions.Eaten -= hud.ShowTasty;
+            world?.Dispose();
+            factory?.Dispose();
             views?.Dispose();
-            if (contactMaterial) Destroy(contactMaterial);
+            remote?.Dispose();
+            lifetime?.Dispose();
         }
     }
 }

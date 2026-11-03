@@ -1,8 +1,11 @@
 using System;
 using System.IO;
-using System.Threading.Tasks;
+using System.Collections;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Zoo.Content;
 using Zoo.Simulation;
 
@@ -29,19 +32,19 @@ namespace Zoo.Tests
         {
             Assert.Throws<ArgumentException>(() => ContentCatalog.Parse(Read("animals"), "{\"schemaVersion\":1,\"rules\":[]}", Read("level")));
         }
-        [Test] public async Task RejectedReloadPreservesActiveCatalog()
+        [UnityTest] public IEnumerator RejectedReloadPreservesActiveCatalog() => UniTask.ToCoroutine(async () =>
         {
             bool invalid = false;
-            var service = new ContentService(path => Task.FromResult(invalid && path.EndsWith("level.json")
+            var service = new ContentService((path, token) => UniTask.FromResult(invalid && path.EndsWith("level.json")
                 ? "{\"schemaVersion\":1}" : File.ReadAllText(path)));
-            await service.ReloadAsync();
+            await service.ReloadAsync(CancellationToken.None);
             Assert.That(service.ApplyPending(), Is.True);
             var previous = service.Current;
             invalid = true;
-            await service.ReloadAsync();
+            await service.ReloadAsync(CancellationToken.None);
             Assert.That(service.ApplyPending(), Is.False);
             Assert.That(service.Current, Is.SameAs(previous));
-        }
+        });
         [Test] public void JumpCoversConfiguredDistanceAcrossPartialPhysicsSteps()
         {
             var jump = new JumpMovement(new MovementDefinition { intervalSeconds = 1.2f, durationSeconds = 0.35f, distance = 2 });
@@ -49,22 +52,22 @@ namespace Zoo.Tests
             for (int i = 0; i < 60; i++) distance += jump.Speed(0.02f) * 0.02f;
             Assert.That(distance, Is.EqualTo(2).Within(0.001f));
         }
-        [Test] public async Task ValidReloadPublishesOnlyAtExplicitBoundary()
+        [UnityTest] public IEnumerator ValidReloadPublishesOnlyAtExplicitBoundary() => UniTask.ToCoroutine(async () =>
         {
             string version = "prototype-1";
-            var service = new ContentService(path => Task.FromResult(File.ReadAllText(path).Replace("prototype-1", version)));
-            await service.ReloadAsync();
+            var service = new ContentService((path, token) => UniTask.FromResult(File.ReadAllText(path).Replace("prototype-1", version)));
+            await service.ReloadAsync(CancellationToken.None);
             Assert.That(service.Current, Is.Null);
             service.ApplyPending();
             var oldDefinition = service.Current.Animal("frog");
             version = "prototype-2";
-            await service.ReloadAsync();
+            await service.ReloadAsync(CancellationToken.None);
             Assert.That(service.Current.Version, Is.EqualTo("prototype-1"));
             service.ApplyPending();
             Assert.That(service.Current.Version, Is.EqualTo("prototype-2"));
             Assert.That(service.Current.Animal("frog"), Is.Not.SameAs(oldDefinition));
             Assert.That(oldDefinition.id, Is.EqualTo("frog"));
-        }
+        });
         [TestCase(1, "prey", 2, "predator", 2)]
         [TestCase(2, "predator", 1, "prey", 2)]
         [TestCase(5, "predator", 3, "predator", 3)]

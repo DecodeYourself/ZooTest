@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Build;
@@ -15,20 +17,24 @@ namespace Zoo.Editor
         public static string VerificationStatus { get; private set; }
 
         [MenuItem("Zoo/Content/Verify CDN release-2 download")]
-        public static async void VerifyDownload()
+        public static void VerifyDownload() => VerifyDownloadAsync(Application.exitCancellationToken).Forget();
+
+        static async UniTask VerifyDownloadAsync(CancellationToken cancellationToken)
         {
             if (!EditorApplication.isPlaying) { VerificationStatus = "Enter Play Mode before verifying downloads"; return; }
             VerificationStatus = "Downloading";
-            var visuals = new Zoo.Presentation.AnimalViewLoader();
+            using var visuals = new Zoo.Presentation.AnimalViewLoader();
+            using var loader = new RemoteReleaseLoader();
             try
             {
-                var release = await new RemoteReleaseLoader().LoadAsync("http://127.0.0.1:8080/release-2/release.json", visuals);
+                var release = await loader.LoadAsync("http://127.0.0.1:8080/release-2/release.json", visuals, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (release.Animal("caracal").movement.kind != "jump" || release.Animal("caracal").foodRole != "predator")
                     throw new InvalidOperationException("Incorrect caracal definition");
                 VerificationStatus = "PASS: " + release.Version + "; remote JSON and caracal prefab downloaded";
             }
+            catch (OperationCanceledException) { VerificationStatus = "Cancelled"; }
             catch (Exception error) { VerificationStatus = "FAIL: " + error; Debug.LogError(VerificationStatus); }
-            finally { visuals.Dispose(); }
         }
 
         [MenuItem("Zoo/Content/Build CDN release-2")]

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
-using System.Threading.Tasks;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -10,8 +11,8 @@ namespace Zoo.Content
     {
         public ContentCatalog Current { get; private set; }
         ContentCatalog pending;
-        readonly Func<string, Task<string>> read;
-        public ContentService(Func<string, Task<string>> read = null) { this.read = read ?? ReadAsync; }
+        readonly Func<string, CancellationToken, UniTask<string>> read;
+        public ContentService(Func<string, CancellationToken, UniTask<string>> read = null) { this.read = read ?? ReadAsync; }
         public bool IsLoading { get; private set; }
         public string Status { get; private set; } = "Loading content...";
 
@@ -21,19 +22,24 @@ namespace Zoo.Content
             Status = "Validated " + candidate.Version + "; awaiting physics step";
         }
 
-        public async Task ReloadAsync()
+        public async UniTask ReloadAsync(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (IsLoading) return;
             IsLoading = true;
             try
             {
                 // Each document is staged before publication. A version directory can be used remotely.
                 var root = Path.Combine(Application.streamingAssetsPath, "Zoo");
-                var a = await read(Path.Combine(root, "animals.json"));
-                var r = await read(Path.Combine(root, "interactions.json"));
-                var l = await read(Path.Combine(root, "level.json"));
-                Stage(ContentCatalog.Parse(a, r, l));
+                var a = await read(Path.Combine(root, "animals.json"), cancellationToken);
+                var r = await read(Path.Combine(root, "interactions.json"), cancellationToken);
+                var l = await read(Path.Combine(root, "level.json"), cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                var candidate = ContentCatalog.Parse(a, r, l);
+                cancellationToken.ThrowIfCancellationRequested();
+                Stage(candidate);
             }
+            catch (OperationCanceledException) { Status = "Config reload cancelled"; throw; }
             catch (Exception error)
             {
                 Status = "Config rejected: " + error.Message;
@@ -51,13 +57,19 @@ namespace Zoo.Content
             return true;
         }
 
-        static async Task<string> ReadAsync(string path)
+        static async UniTask<string> ReadAsync(string path, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // StreamingAssets is a URL on Android/WebGL, and a real file in the editor/desktop.
-            if (!path.Contains("://")) return File.ReadAllText(path);
+            if (!path.Contains("://"))
+            {
+                var text = File.ReadAllText(path);
+                cancellationToken.ThrowIfCancellationRequested();
+                return text;
+            }
             using var request = UnityWebRequest.Get(path);
-            var operation = request.SendWebRequest();
-            while (!operation.isDone) await Task.Yield();
+            request.timeout = 20;
+            await request.SendWebRequest().WithCancellation(cancellationToken, cancelImmediately: true);
             if (request.result != UnityWebRequest.Result.Success) throw new IOException(request.error);
             return request.downloadHandler.text;
         }

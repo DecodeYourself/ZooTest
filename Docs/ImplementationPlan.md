@@ -35,3 +35,5 @@
 - Milestone 4: EditMode and PlayMode suites pass; standalone player build/performance profiling remain outstanding.
 - Continuous presentation: interpolated jump height/heading, smooth steering, staggered jump phases,
   Run In Background enabled. PlayMode verifies movement between physics ticks.
+- Follow-up: fallback geometry pool/shared materials and explicit composition/factory/spawn/world/content
+  services implemented. Sequential preload and the existing movement contract retained by agreement.

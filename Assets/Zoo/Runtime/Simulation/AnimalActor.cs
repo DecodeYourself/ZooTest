@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Threading;
 using Zoo.Content;
 
 namespace Zoo.Simulation
@@ -21,10 +22,14 @@ namespace Zoo.Simulation
         Quaternion currentRotation;
         float turnTimer;
         float recoilTime;
+        CancellationTokenSource lifetime;
+        public CancellationToken LifetimeToken { get; private set; }
 
         public void Initialize(int id, AnimalDefinition definition, InteractionResolver resolver, PhysicsMaterial material)
         {
             Id = id;
+            lifetime = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+            LifetimeToken = lifetime.Token;
             Definition = definition;
             interactions = resolver;
             movement = MovementFactory.Create(definition.movement);
@@ -95,10 +100,17 @@ namespace Zoo.Simulation
         {
             if (!IsAlive) return false;
             IsAlive = false;
+            lifetime.Cancel();
             GetComponent<Collider>().enabled = false;
             gameObject.SetActive(false);
             Destroy(gameObject);
             return true;
+        }
+
+        void OnDestroy()
+        {
+            lifetime?.Cancel();
+            lifetime?.Dispose();
         }
     }
 }
